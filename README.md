@@ -6,7 +6,18 @@ Proof of concept for hosting a containerized Next.js survey app (admin + respond
 
 ## Quick start
 
-Nothing to run yet. This section will cover:
+Available now: run the skeleton locally (below). The rest lands in later PRs.
+
+**Run the skeleton today**
+
+```bash
+npm ci && npm run dev          # http://localhost:3000, health check at /healthz
+docker build -t survey-host-poc . && docker run --rm -p 3000:3000 survey-host-poc
+```
+
+Checks (also run in CI): `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm run build`.
+
+Planned steps:
 
 1. **One-time setup:** install Docker, Terraform, Azure CLI; `az login`; copy `.env.example` to `.env`.
 2. **Run locally:** `docker compose up`
