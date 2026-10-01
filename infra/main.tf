@@ -10,7 +10,12 @@ terraform {
 
 # Subscription comes from ARM_SUBSCRIPTION_ID (scripts/up.ps1 sets it from `az account show`).
 provider "azurerm" {
-  features {}
+  features {
+    # Without this, a destroyed workspace lingers soft-deleted for 14 days and blocks a same-name rebuild.
+    log_analytics_workspace {
+      permanently_delete_on_destroy = true
+    }
+  }
 }
 
 locals {
