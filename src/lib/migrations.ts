@@ -30,4 +30,39 @@ export const migrations: { id: string; sql: string }[] = [
       );
     `,
   },
+  {
+    id: "002_immutability_guards",
+    sql: `
+      -- Finished and revoked records cannot be changed back, and nothing is deleted, even by a
+      -- future application bug. (A database administrator can still drop these triggers.)
+      CREATE FUNCTION responses_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF TG_OP = 'DELETE' THEN
+          RAISE EXCEPTION 'responses cannot be deleted';
+        END IF;
+        IF OLD.status = 'submitted' AND (
+             NEW.status <> 'submitted'
+             OR NEW.answers_enc IS DISTINCT FROM OLD.answers_enc
+             OR NEW.token_hash IS DISTINCT FROM OLD.token_hash
+             OR NEW.org_name IS DISTINCT FROM OLD.org_name) THEN
+          RAISE EXCEPTION 'submitted responses are immutable';
+        END IF;
+        IF OLD.status = 'revoked' AND NEW.status <> 'revoked' THEN
+          RAISE EXCEPTION 'revoked responses cannot be restored';
+        END IF;
+        RETURN NEW;
+      END $$;
+
+      CREATE TRIGGER responses_guard BEFORE UPDATE OR DELETE ON responses
+        FOR EACH ROW EXECUTE FUNCTION responses_guard();
+
+      CREATE FUNCTION audit_log_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        RAISE EXCEPTION 'audit_log is append-only';
+      END $$;
+
+      CREATE TRIGGER audit_log_guard BEFORE UPDATE OR DELETE ON audit_log
+        FOR EACH ROW EXECUTE FUNCTION audit_log_guard();
+    `,
+  },
 ];

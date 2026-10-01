@@ -12,23 +12,30 @@ type Row = {
   expiresAt: string;
 };
 
+type AuditEvent = { at: string; event: string; responseId: string | null };
+
 const fmt = (s: string | null) => (s ? new Date(s).toLocaleString() : "");
 
 export default function Admin() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [newLink, setNewLink] = useState<{ org: string; link: string } | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/admin/responses");
     setRows(res.ok ? (await res.json()).responses : null);
+    const a = await fetch("/api/admin/audit");
+    if (a.ok) setAudit((await a.json()).events);
   }, []);
 
   useEffect(() => {
     async function first() {
       const res = await fetch("/api/admin/responses");
       setRows(res.ok ? (await res.json()).responses : null);
+      const a = await fetch("/api/admin/audit");
+      if (a.ok) setAudit((await a.json()).events);
     }
     void first();
   }, []);
@@ -135,6 +142,26 @@ export default function Admin() {
         </tbody>
       </table>
       {rows.length === 0 && <p>No responses yet.</p>}
+
+      <h2>Recent activity</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Event</th>
+            <th>Response</th>
+          </tr>
+        </thead>
+        <tbody>
+          {audit.map((e, i) => (
+            <tr key={i}>
+              <td>{fmt(e.at)}</td>
+              <td>{e.event}</td>
+              <td>{e.responseId ?? ""}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </main>
   );
 }

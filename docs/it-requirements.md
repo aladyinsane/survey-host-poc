@@ -34,7 +34,7 @@ POC resources (all Azure, one resource group, defined in Terraform in `infra/`):
 | 4 | Postgres 16 with no public endpoint, TLS required, encryption at rest, backups | Stores responses | Flexible Server, private access, 7 day backups |
 | 5 | A secret store for the app's secrets (database URL with its password, data encryption key, admin password hash, session secret) | The app needs them at start | Container Apps secrets. Terraform generates all except the admin password hash, which the deployer supplies |
 | 6 | Admin sign-in through our identity provider (Entra ID SSO) instead of the built-in shared password | Individual accountability, MFA, offboarding | Built-in single shared password (POC only) |
-| 7 | Log retention, plus a way to read the app's audit table or ship it to a SIEM | Incident response | 30 days of container logs in Log Analytics. The audit table sits in the private database and the app has no viewer for it yet |
+| 7 | Log retention, plus a way to read the app's audit table or ship it to a SIEM | Incident response | 30 days of container logs in Log Analytics. The app's admin page shows the latest 200 audit events. The full table sits in the private database |
 | 8 | Backup and restore policy for the database, and a decision on retention of responses | Data lifecycle | 7 day platform backups, no restore tested |
 | 9 | Optional: WAF or gateway in front, with request size limits and shared rate limiting | Defense in depth, and lets us run more than one replica | None |
 | 10 | Image build, scanning and patching process for the container | Supply chain | CI scans an image built from each PR. The deployed image is built on the deployer's machine by `up.ps1`, from an unpinned `node:24-alpine` base, so it is not the exact image CI scanned |
@@ -50,14 +50,14 @@ POC resources (all Azure, one resource group, defined in Terraform in `infra/`):
 | Respondent credential strength | 256-bit random token, only its SHA-256 hash is stored | App | In POC |
 | Credential kept out of logs | Token travels in the URL fragment and an Authorization header, never in the URL path or query | App | In POC |
 | No enumeration of valid links | Wrong, expired, and revoked tokens return the same 404. Failed lookups are rate limited | App | In POC |
-| Submitted responses cannot change | Update statements only match in-progress rows, plus a database CHECK constraint | App | In POC |
+| Submitted responses cannot change, nothing is deleted | Update statements only match in-progress rows, a CHECK constraint, and database triggers that reject edits to submitted rows, un-revoking, deleting responses, and changing or deleting audit rows | App | In POC (a database administrator can still drop the triggers) |
 | Answers cannot be moved between records | Ciphertext is bound to its record id | App | In POC |
-| Input validation | Schema validation on every endpoint, unknown fields rejected, 20 KB body limit | App | In POC |
+| Input validation | Schema validation on every endpoint, unknown fields rejected, 20 KB body limit (declared size checked first, then actual bytes) | App | In POC |
 | Security headers | CSP, X-Content-Type-Options, Referrer-Policy no-referrer, Permissions-Policy, frame-ancestors none, no-store caching | App | In POC (CSP allows inline scripts, see section 6) |
 | Admin authentication | Scrypt password hash, constant-time compare, per-IP and global login limits, signed HttpOnly SameSite=Strict cookie, 4 hour expiry | App | In POC, to be replaced by SSO |
 | Admin CSRF protection | SameSite=Strict plus same-origin check on every state-changing request | App | In POC |
 | Spreadsheet injection in export | Cells beginning with = + - @ are neutralized | App | In POC |
-| Audit trail | Table records created, saved, submitted, admin login, failed login, reissue, revoke, export. Never holds answers or tokens | App | In POC |
+| Audit trail | Append-only table records created, saved, submitted, admin login, failed login, reissue, revoke, export. Never holds answers or tokens. Latest 200 events visible on the admin page | App | In POC |
 | No destructive edits | Revoke and reissue change state and keep the row. Nothing is deleted | App | In POC |
 | Secrets not in source control | Generated at deploy time, held in platform secrets and local Terraform state | Platform, process | In POC |
 | Container hardening | Non-root user, npm and corepack removed from the runtime image, health probes | App | In POC |
@@ -71,7 +71,7 @@ The unique link is a bearer secret. Anyone who has it can read and change that r
 - The link is shown once, with Copy, Download, and "Email to myself" buttons. The last one opens the respondent's own mail client, so the server never sees their address.
 - The browser remembers the link on the same device so respondents can resume from the home page.
 - If a link is lost, an administrator can issue a new one after confirming the respondent's identity by phone or email. The old link stops working immediately.
-- Links expire 90 days after the response is created, no matter how recently it was saved. Expiry only blocks access. Nothing is purged, so expired rows and their ciphertext stay in the database until someone deletes them. Administrators can revoke a link.
+- Links expire 90 days after the response is created, no matter how recently it was saved. Expiry only blocks access. Reissuing a link restarts the 90 days. Nothing is purged, so expired rows and their ciphertext stay in the database until someone deletes them. Administrators can revoke a link.
 - The browser's localStorage also holds the link on that device. Combined with the inline-script allowance in the CSP (gap 4), a script injection bug could read it.
 
 Downsides: forwarding a link forwards access, a shared computer can expose it, and recovery relies on a manual identity check against a self-reported organization name. These are documented in `docs/adr/0002-token-link-credential.md`.
@@ -83,14 +83,14 @@ Downsides: forwarding a link forwards access, a shared computer can expose it, a
 3. **Database certificate is not verified.** The connection is encrypted over a private network, but the server certificate is not checked. Production should verify it against the Azure CA bundle.
 4. **CSP allows inline scripts.** Next.js needs them for hydration. A nonce-based policy is planned.
 5. **Container Apps has no read-only root filesystem option.** Local compose enforces one. Another platform (AKS) could enforce it.
-6. **Body size limit is checked after the body is read.** A gateway or WAF should cap request size.
+6. **Request size is limited inside the app only.** Oversized requests are rejected by declared length, but a body can still be streamed to the app first. A gateway or WAF should cap request size.
 7. **No tested restore.** Backups exist at the platform level. Restore has not been exercised.
-8. **No lock on status changes in the database.** Submitted rows are protected by update conditions and a CHECK constraint, not a trigger.
+8. **Immutability guards can be removed by the database admin.** The triggers that protect submitted and revoked rows, and the audit table, are in the schema, and the app's database account (gap 12) has the rights to drop them.
 9. **Secrets sit next to the data they protect.** Terraform state on the deployer's machine holds the data encryption key, database password and session secret in plain text, and the platform secret store holds the same values. Anyone who can read either can decrypt the answers, so app-level encryption mainly protects against a database-only leak. Production needs a remote, locked, access-controlled state backend, and ideally a key held in a vault that the database administrators cannot read.
 10. **No survey builder, multi-survey support, or voiding a submitted response.** One demo survey is defined in code.
-11. **Expiry cannot be extended.** Reissuing a link does not move the 90 day expiry, so an expired response cannot be recovered, and a survey that runs longer than 90 days needs a code change. Nothing purges expired data either.
+11. **Hard 90 day expiry.** A link expires 90 days after creation. Reissuing a link restarts the 90 days, but there is no other way to extend it and a survey that runs longer needs a code change. Nothing purges expired data.
 12. **The app uses the database admin account.** There is no separate least-privilege role (need 11).
-13. **No audit viewer.** The audit table can only be read by someone with private database access.
+13. **Audit viewer is minimal.** The admin page shows the latest 200 events with no filtering, no user identity (one shared admin), and no IP address. Shipping rows to a SIEM needs private database access.
 14. **No penetration test or formal threat review.** The checks done so far are code review and live testing of the flows.
 
 ## 7. Threats considered
@@ -115,7 +115,7 @@ Downsides: forwarding a link forwards access, a shared computer can expose it, a
 - **Where is data stored and for how long?** In one Postgres database in the chosen Azure region. Links expire after 90 days. We need a retention decision from the business.
 - **Who can see responses?** Anyone with admin access, and platform administrators with database and key access. The encryption key is in the platform secret store, so a platform administrator can read it.
 - **Can we put this behind our WAF or API gateway?** Yes. The app is a normal HTTPS container. Doing so would remove gaps 2 and 6.
-- **Can it run on our existing platform?** Yes. It needs one container, a Postgres 16 database, four secrets, and HTTPS ingress. Nothing in the app is Azure-specific. The Terraform is.
+- **Can it run on our existing platform?** Yes. It needs one container, a Postgres 16 database, a few secrets (see need 5), and HTTPS ingress. Nothing in the app is Azure-specific. The Terraform is.
 - **What happens when it is deleted?** `./scripts/down.ps1` destroys the database, the key, and everything else in the POC. Production would need an agreed retention and deletion process.
 
 ## 9. If IT cannot deliver in time

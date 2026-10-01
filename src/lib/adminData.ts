@@ -42,10 +42,12 @@ export async function revokeResponse(id: string): Promise<boolean> {
 }
 
 // Rotates the token: the old link stops working immediately. Returns the new token once.
+// Also restarts the 90 day window so a reissued link is not already expired.
 export async function reissueToken(id: string): Promise<string | null> {
   const token = generateToken();
   const { rowCount } = await pool().query(
-    "UPDATE responses SET token_hash = $2, updated_at = now() WHERE id = $1 AND status = 'in_progress'",
+    `UPDATE responses SET token_hash = $2, updated_at = now(), expires_at = now() + interval '90 days'
+     WHERE id = $1 AND status = 'in_progress'`,
     [id, hashToken(token)],
   );
   return rowCount === 1 ? token : null;
@@ -76,4 +78,14 @@ export async function exportCsv(): Promise<string> {
     ]);
   }
   return out;
+}
+
+export type AuditRow = { at: string; event: string; responseId: string | null };
+
+export async function recentAudit(limit = 200): Promise<AuditRow[]> {
+  const { rows } = await pool().query(
+    "SELECT at, event, response_id FROM audit_log ORDER BY id DESC LIMIT $1",
+    [limit],
+  );
+  return rows.map((r) => ({ at: r.at.toISOString(), event: r.event, responseId: r.response_id }));
 }
