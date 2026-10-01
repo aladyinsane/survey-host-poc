@@ -11,11 +11,12 @@ Available now: run the skeleton locally (below). The rest lands in later PRs.
 **Run locally (Docker)**
 
 ```bash
-cp .env.example .env     # then set DATA_ENCRYPTION_KEY (generator command is in the file)
+cp .env.example .env     # then fill in the secrets; the generator commands are in the file
+node scripts/hash-admin-password.mjs   # prompts for an admin password, prints ADMIN_PASSWORD_HASH
 docker compose up --build
 ```
 
-Open http://localhost:3000 (set `APP_PORT` in `.env` if 3000 is taken). Stop and wipe local data with `docker compose down -v`.
+Open http://localhost:3000 for respondents and http://localhost:3000/admin for the admin page (set `APP_PORT` in `.env` if 3000 is taken). Stop and wipe local data with `docker compose down -v`.
 
 Checks (also run in CI): `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run build`.
 

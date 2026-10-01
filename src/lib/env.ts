@@ -6,6 +6,10 @@ const schema = z.object({
   DATA_ENCRYPTION_KEY: z
     .string()
     .refine((v) => Buffer.from(v, "base64").length === 32, "must be 32 bytes, base64 encoded"),
+  // From: node scripts/hash-admin-password.mjs
+  ADMIN_PASSWORD_HASH: z.string().startsWith("scrypt:"),
+  // Any random string, 32+ chars. Signs admin session cookies.
+  ADMIN_SESSION_SECRET: z.string().min(32),
 });
 
 export type Env = z.infer<typeof schema>;
