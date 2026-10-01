@@ -11,3 +11,4 @@ node_modules/
 backups/
 *.tsbuildinfo
 infra/.admin-hash
+infra/.admin-password.txt
