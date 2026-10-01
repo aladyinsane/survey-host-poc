@@ -3,9 +3,27 @@ updates:
   - package-ecosystem: npm
     directory: /
     schedule: { interval: weekly }
+    groups:
+      # react and react-dom must always move together (react-dom pins an exact react version).
+      react:
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
+    ignore:
+      # Held until eslint-config-next supports them (typescript-eslint and eslint-plugin-react break).
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
+      # Must match the Node version in the Dockerfile. Move them together, deliberately.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker
     directory: /
     schedule: { interval: weekly }
+    ignore:
+      # Node 24 is the current LTS (supported to 2028). Move to the next LTS on purpose, with
+      # @types/node and the CI node-version, not on a bot's schedule.
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
