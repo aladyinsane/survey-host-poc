@@ -24,13 +24,21 @@ function Need($cmd) {
   if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) { throw "$cmd is not installed or not on PATH." }
 }
 Need az; Need terraform; Need docker; Need node
-docker info *> $null
+& cmd /c "docker info >nul 2>&1"
 if ($LASTEXITCODE -ne 0) { throw "Docker is installed but not running. Start Docker Desktop and retry." }
 
-# Native commands do not throw on failure in PowerShell 5.1, so check the exit code explicitly.
+# Windows PowerShell 5.1 turns anything a native command writes to stderr (terraform warnings,
+# docker build progress, az notices) into a terminating error when $ErrorActionPreference is Stop.
+# So run native commands with Continue, show their output, and judge success by exit code only.
 function Run {
-  & $args[0] $args[1..($args.Length - 1)]
-  if ($LASTEXITCODE -ne 0) { throw "Command failed: $($args -join ' ')" }
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    & $args[0] $args[1..($args.Length - 1)] 2>&1 | ForEach-Object { Write-Host "$_" }
+  } finally {
+    $ErrorActionPreference = $prev
+  }
+  if ($LASTEXITCODE -ne 0) { throw "Command failed (exit $LASTEXITCODE): $($args -join ' ')" }
 }
 
 $sub = az account show --query id -o tsv
@@ -86,8 +94,8 @@ try {
     throw
   }
 
-  $url = terraform output -raw survey_url
-  $admin = terraform output -raw admin_url
+  $url = (& terraform output -raw survey_url 2>$null)
+  $admin = (& terraform output -raw admin_url 2>$null)
 } finally {
   Pop-Location
 }

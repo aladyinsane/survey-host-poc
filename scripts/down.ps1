@@ -30,7 +30,10 @@ Push-Location $infra
 try {
   # Variables are required by the config but irrelevant when destroying.
   $env:TF_VAR_admin_password_hash = "destroy"
-  terraform destroy -input=false -auto-approve
+  # Native stderr output must not abort the script under 5.1; judge by exit code instead.
+  $ErrorActionPreference = "Continue"
+  & terraform destroy -input=false -auto-approve 2>&1 | ForEach-Object { Write-Host "$_" }
+  $ErrorActionPreference = "Stop"
   if ($LASTEXITCODE -ne 0) { throw "terraform destroy failed. Re-run, or delete $rg in the Azure portal." }
 } finally {
   Pop-Location
