@@ -71,7 +71,7 @@ The unique link is a bearer secret. Anyone who has it can read and change that r
 - The link is shown once, with Copy, Download, and "Email to myself" buttons. The last one opens the respondent's own mail client, so the server never sees their address.
 - The browser remembers the link on the same device so respondents can resume from the home page.
 - If a link is lost, an administrator can issue a new one after confirming the respondent's identity by phone or email. The old link stops working immediately.
-- Links expire 90 days after the response is created, no matter how recently it was saved. Expiry only blocks access. Reissuing a link restarts the 90 days. Nothing is purged, so expired rows and their ciphertext stay in the database until someone deletes them. Administrators can revoke a link.
+- Links expire 90 days after the response is created, no matter how recently it was saved. Expiry only blocks access. Reissuing a link restarts the 90 days. Nothing is purged, so expired rows and their ciphertext stay in the database until a database administrator removes them (the delete-guard trigger has to be dropped first). Administrators can revoke a link.
 - The browser's localStorage also holds the link on that device. Combined with the inline-script allowance in the CSP (gap 4), a script injection bug could read it.
 
 Downsides: forwarding a link forwards access, a shared computer can expose it, and recovery relies on a manual identity check against a self-reported organization name. These are documented in `docs/adr/0002-token-link-credential.md`.
