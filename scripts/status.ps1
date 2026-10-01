@@ -5,14 +5,15 @@
 $ErrorActionPreference = "Stop"
 $rg = "rg-survey-poc"
 
-$exists = az group exists --name $rg
+. (Join-Path $PSScriptRoot "_native.ps1")
+$exists = Get-NativeOutput az group exists --name $rg
 if ($exists -ne "true") {
   Write-Host "Not deployed ($rg does not exist). Nothing is billing."
   exit 0
 }
 Write-Host "Deployed: $rg exists, so it is billing."
 az resource list --resource-group $rg --query "[].{type:type, name:name}" -o table
-$fqdn = az containerapp list --resource-group $rg --query "[0].properties.configuration.ingress.fqdn" -o tsv
+$fqdn = Get-NativeOutput az containerapp list --resource-group $rg --query "[0].properties.configuration.ingress.fqdn" -o tsv
 if ($fqdn) {
   Write-Host "`nRespondent link: https://$fqdn"
   Write-Host "Admin:           https://$fqdn/admin"

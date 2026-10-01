@@ -27,31 +27,21 @@ Need az; Need terraform; Need docker; Need node
 & cmd /c "docker info >nul 2>&1"
 if ($LASTEXITCODE -ne 0) { throw "Docker is installed but not running. Start Docker Desktop and retry." }
 
-# Windows PowerShell 5.1 turns anything a native command writes to stderr (terraform warnings,
-# docker build progress, az notices) into a terminating error when $ErrorActionPreference is Stop.
-# So run native commands with Continue, show their output, and judge success by exit code only.
-function Run {
-  $prev = $ErrorActionPreference
-  $ErrorActionPreference = "Continue"
-  try {
-    & $args[0] $args[1..($args.Length - 1)] 2>&1 | ForEach-Object { Write-Host "$_" }
-  } finally {
-    $ErrorActionPreference = $prev
-  }
-  if ($LASTEXITCODE -ne 0) { throw "Command failed (exit $LASTEXITCODE): $($args -join ' ')" }
-}
+. (Join-Path $PSScriptRoot "_native.ps1")
 
-$sub = az account show --query id -o tsv
-if ($LASTEXITCODE -ne 0 -or -not $sub) { throw "Not logged in. Run: az login" }
+$sub = Get-NativeOutput az account show --query id -o tsv
+if (-not $sub) { throw "Not logged in. Run: az login" }
 $env:ARM_SUBSCRIPTION_ID = $sub
-Write-Host "Subscription: $(az account show --query name -o tsv)"
+Write-Host "Subscription: $(Get-NativeOutput az account show --query name -o tsv)"
 
 # Admin password: prompt once, keep only the hash (gitignored) so redeploys do not re-prompt.
 $hashFile = Join-Path $infra ".admin-hash"
 if ($ResetAdminPassword -or -not (Test-Path $hashFile)) {
   $secure = Read-Host "Choose an admin password (min 12 characters)" -AsSecureString
   $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
+  $ErrorActionPreference = "Continue"
   $hash = $plain | node (Join-Path $PSScriptRoot "hash-admin-password.mjs") 2>$null
+  $ErrorActionPreference = "Stop"
   if ($LASTEXITCODE -ne 0 -or -not $hash) { throw "Password too short or hashing failed." }
   Set-Content -Path $hashFile -Value $hash.Trim() -NoNewline
 }
@@ -61,32 +51,32 @@ if ($AllowedIp.Count -gt 0) { $env:TF_VAR_allowed_ip_ranges = (ConvertTo-Json -C
 
 Write-Host "Registering Azure resource providers (one-time, can take a minute)..."
 foreach ($p in "Microsoft.App", "Microsoft.ContainerRegistry", "Microsoft.DBforPostgreSQL", "Microsoft.OperationalInsights", "Microsoft.ManagedIdentity", "Microsoft.Network") {
-  Run az provider register --namespace $p --wait
+  Invoke-Native az provider register --namespace $p --wait
 }
 
 Push-Location $infra
 try {
-  Run terraform init -input=false
+  Invoke-Native terraform init -input=false
 
   # Step 1: resource group and registry only, so there is somewhere to push the image.
   Write-Host "`n[1/3] Creating registry..."
-  Run terraform apply -input=false -auto-approve -target=azurerm_resource_group.rg -target=azurerm_container_registry.acr
+  Invoke-Native terraform apply -input=false -auto-approve -target=azurerm_resource_group.rg -target=azurerm_container_registry.acr
 
-  $acr = az acr list --resource-group $rg --query "[0].name" -o tsv
+  $acr = Get-NativeOutput az acr list --resource-group $rg --query "[0].name" -o tsv
   if (-not $acr) { throw "Registry not found in $rg" }
 
   Write-Host "`n[2/3] Building and pushing the image..."
   $tag = Get-Date -Format "yyyyMMddHHmmss"
   $image = "$acr.azurecr.io/survey-host-poc:$tag"
-  Run az acr login --name $acr
-  Run docker build -t $image $root
-  Run docker push $image
+  Invoke-Native az acr login --name $acr
+  Invoke-Native docker build -t $image $root
+  Invoke-Native docker push $image
 
   # Step 3: everything else (Postgres takes the longest, roughly 5-10 minutes).
   Write-Host "`n[3/3] Creating database and app (about 10 minutes)..."
   $env:TF_VAR_image_tag = $tag
   try {
-    Run terraform apply -input=false -auto-approve
+    Invoke-Native terraform apply -input=false -auto-approve
   } catch {
     Write-Warning "Deploy failed after some resources were created. Fix the error and re-run ./scripts/up.ps1 (safe to repeat),"
     Write-Warning "or run ./scripts/down.ps1 to remove everything. If Postgres is not available in $Location, retry with -Location <other region>"
@@ -94,8 +84,8 @@ try {
     throw
   }
 
-  $url = (& terraform output -raw survey_url 2>$null)
-  $admin = (& terraform output -raw admin_url 2>$null)
+  $url = (Get-NativeOutput terraform output -raw survey_url)
+  $admin = (Get-NativeOutput terraform output -raw admin_url)
 } finally {
   Pop-Location
 }
