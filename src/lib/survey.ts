@@ -26,7 +26,11 @@ export const survey = {
 
 export type SurveyAnswers = Record<string, number | null>;
 
-const keys: string[] = survey.sections.flatMap((s) => s.fields.map((f) => f.key));
+export const allFields: { key: string; label: string }[] = survey.sections.flatMap((s) => [
+  ...s.fields,
+]);
+
+const keys = allFields.map((f) => f.key);
 
 const value = z.number().finite().min(0).max(1e12);
 

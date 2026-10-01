@@ -23,6 +23,8 @@ services:
     environment:
       DATABASE_URL: postgres://survey:${POSTGRES_PASSWORD:-survey}@db:5432/survey
       DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?set DATA_ENCRYPTION_KEY in .env}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:?set ADMIN_PASSWORD_HASH in .env}
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:?set ADMIN_SESSION_SECRET in .env}
     ports:
       - "127.0.0.1:${APP_PORT:-3000}:3000"
     read_only: true
