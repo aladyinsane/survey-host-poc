@@ -8,7 +8,7 @@ function Invoke-Native {
   $prev = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
   try {
-    & $args[0] $args[1..($args.Length - 1)] 2>&1 | ForEach-Object { Write-Host "$_" }
+    & $args[0] $args[1..($args.Length - 1)] 2>&1 | ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Host $_.Exception.Message } else { Write-Host "$_" } }
   } finally {
     $ErrorActionPreference = $prev
   }
