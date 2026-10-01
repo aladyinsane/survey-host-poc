@@ -60,7 +60,8 @@ try {
 
   # Step 1: resource group and registry only, so there is somewhere to push the image.
   Write-Host "`n[1/3] Creating registry..."
-  Invoke-Native terraform apply -input=false -auto-approve -target=azurerm_resource_group.rg -target=azurerm_container_registry.acr
+  # Quote -target values: 5.1 splits an unquoted -name=a.b token at the dot.
+  Invoke-Native terraform apply "-input=false" "-auto-approve" "-target=azurerm_resource_group.rg" "-target=azurerm_container_registry.acr"
 
   $acr = Get-NativeOutput az acr list --resource-group $rg --query "[0].name" -o tsv
   if (-not $acr) { throw "Registry not found in $rg" }
