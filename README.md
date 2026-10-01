@@ -8,19 +8,21 @@ Proof of concept for hosting a containerized Next.js survey app (admin + respond
 
 Available now: run the skeleton locally (below). The rest lands in later PRs.
 
-**Run the skeleton today**
+**Run locally (Docker)**
 
 ```bash
-npm ci && npm run dev          # http://localhost:3000, health check at /healthz
-docker build -t survey-host-poc . && docker run --rm -p 3000:3000 survey-host-poc
+cp .env.example .env     # then set DATA_ENCRYPTION_KEY (generator command is in the file)
+docker compose up --build
 ```
 
-Checks (also run in CI): `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm run build`.
+Open http://localhost:3000 (set `APP_PORT` in `.env` if 3000 is taken). Stop and wipe local data with `docker compose down -v`.
+
+Checks (also run in CI): `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run build`.
 
 Planned steps:
 
 1. **One-time setup:** install Docker, Terraform, Azure CLI; `az login`; copy `.env.example` to `.env`.
-2. **Run locally:** `docker compose up`
+2. **Run locally:** see above
 3. **Build and deploy to Azure:** `./scripts/up.ps1`
 4. **Demo:** the generic link, the admin URL, and a short demo script.
 5. **Tear down:** `./scripts/down.ps1`, then confirm nothing is still billing.
