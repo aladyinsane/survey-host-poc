@@ -10,3 +10,4 @@ node_modules/
 !*.tfvars.example
 backups/
 *.tsbuildinfo
+infra/.admin-hash
