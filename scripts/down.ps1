@@ -41,5 +41,6 @@ $exists = az group exists --name $rg
 if ($exists -eq "true") {
   Write-Warning "$rg still exists. Deleting it directly..."
   az group delete --name $rg --yes
+  if ((az group exists --name $rg) -eq "true") { throw "$rg still exists. Delete it in the Azure portal." }
 }
 Write-Host "Torn down. Nothing from this POC should be billing now."

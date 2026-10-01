@@ -24,6 +24,8 @@ function Need($cmd) {
   if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) { throw "$cmd is not installed or not on PATH." }
 }
 Need az; Need terraform; Need docker; Need node
+docker info *> $null
+if ($LASTEXITCODE -ne 0) { throw "Docker is installed but not running. Start Docker Desktop and retry." }
 
 # Native commands do not throw on failure in PowerShell 5.1, so check the exit code explicitly.
 function Run {
@@ -47,7 +49,7 @@ if ($ResetAdminPassword -or -not (Test-Path $hashFile)) {
 }
 $env:TF_VAR_admin_password_hash = (Get-Content $hashFile -Raw).Trim()
 $env:TF_VAR_location = $Location
-if ($AllowedIp.Count -gt 0) { $env:TF_VAR_allowed_ip_ranges = ($AllowedIp | ConvertTo-Json -Compress) }
+if ($AllowedIp.Count -gt 0) { $env:TF_VAR_allowed_ip_ranges = (ConvertTo-Json -Compress -InputObject @($AllowedIp)) }
 
 Write-Host "Registering Azure resource providers (one-time, can take a minute)..."
 foreach ($p in "Microsoft.App", "Microsoft.ContainerRegistry", "Microsoft.DBforPostgreSQL", "Microsoft.OperationalInsights", "Microsoft.ManagedIdentity", "Microsoft.Network") {
@@ -75,7 +77,14 @@ try {
   # Step 3: everything else (Postgres takes the longest, roughly 5-10 minutes).
   Write-Host "`n[3/3] Creating database and app (about 10 minutes)..."
   $env:TF_VAR_image_tag = $tag
-  Run terraform apply -input=false -auto-approve
+  try {
+    Run terraform apply -input=false -auto-approve
+  } catch {
+    Write-Warning "Deploy failed after some resources were created. Fix the error and re-run ./scripts/up.ps1 (safe to repeat),"
+    Write-Warning "or run ./scripts/down.ps1 to remove everything. If Postgres is not available in $Location, retry with -Location <other region>"
+    Write-Warning "after running down.ps1 (changing region on an existing deployment replaces it)."
+    throw
+  }
 
   $url = terraform output -raw survey_url
   $admin = terraform output -raw admin_url

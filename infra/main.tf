@@ -76,6 +76,8 @@ resource "azurerm_role_assignment" "acr_pull" {
   scope                = azurerm_container_registry.acr.id
   role_definition_name = "AcrPull"
   principal_id         = azurerm_user_assigned_identity.app.principal_id
+
+  skip_service_principal_aad_check = true # the principal was just created; avoids a replication race
 }
 
 # Role assignments take a moment to propagate; creating the app too early fails the image pull.
