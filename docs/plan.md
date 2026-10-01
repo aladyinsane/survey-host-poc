@@ -1,5 +1,7 @@
 # Survey hosting POC: plan
 
+> **What changed from this plan (as built):** the local compose file shipped with the respondent flow, so there was no separate `feat/local-compose` PR. `down.ps1` has no `-Backup` option because Postgres is private; export the CSV from the admin page instead. Reissue also restarts the 90 day expiry. Added later: shared PowerShell helpers, Dependabot grouping, DB-level immutability triggers, an audit viewer, and a live deploy/teardown verification (see `docs/it-requirements.md` section 10). Still not done: nonce-based CSP, a least-privilege DB role, DB certificate verification, custom domain, SSO.
+
 ## Context
 Lauren has a working Next.js survey prototype at work but IT has not approved an externally accessible production environment. Goal: a public, containerized POC in a new public GitHub repo (`survey-host-poc`) with real security controls, plus documentation she can hand to IT as "this is what I need". It also stays usable as a fallback launch option if IT does not deliver in time.
 
