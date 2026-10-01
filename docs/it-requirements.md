@@ -131,7 +131,21 @@ Prerequisites: a laptop with Azure CLI, Terraform, Docker and Node; rights in th
 
 Before using it for a real survey, close the gaps that matter most: admin access (1), database certificate verification (3), a tested backup (7), the 90 day expiry (11), and a custom domain (need 3). Share this document and the repo with IT so they can review it in parallel.
 
-## 10. Reference
+## 10. What was verified on a live deployment
+
+The POC was deployed to Azure (East US 2) on 2026-10-01 with `up.ps1`, tested, then destroyed with `down.ps1`.
+
+- HTTPS works on the Azure hostname. HTTP returns a 301 redirect to HTTPS.
+- The security headers in section 4 are present on responses from the live app.
+- The full respondent flow worked end to end: start, save, resume, submit, and a rejected edit after submit. Admin sign-in, list, CSV export, and audit events worked. Unauthenticated admin calls returned 401, and a bad respondent token returned 404.
+- The database reports public network access disabled, sits on a delegated private subnet, and its hostname does not resolve from the public internet.
+- The container app ran as exactly one replica, took all four secrets from platform secrets (none appear in its environment settings), and the registry admin user was off.
+- The container logs held no answers, organization names, or passwords.
+- After `down.ps1`, the subscription's resource groups and resource count matched what they were before the deploy, with no leftover managed resource groups or soft-deleted workspaces.
+
+Not verified: the database contents on the live server (checked only locally), certificate details beyond the platform default, behavior under load, and a restore from backup.
+
+## 11. Reference
 
 - Respondent endpoints: `POST /api/responses`, `GET` and `PUT /api/responses/me`, `POST /api/responses/me/submit`
 - Admin: `/admin`, `/api/admin/*`
