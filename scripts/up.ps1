@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Build and deploy the whole POC to Azure (about 10-15 minutes). Prints the survey and admin URLs.
+  Build and deploy the whole POC to Azure (about 15-20 minutes). Prints the survey and admin URLs.
 .PARAMETER Location
   Azure region. Default eastus2. Try another if Postgres Flexible Server is restricted there.
 .PARAMETER AllowedIp
@@ -73,8 +73,8 @@ try {
   Invoke-Native docker build -t $image $root
   Invoke-Native docker push $image
 
-  # Step 3: everything else (Postgres takes the longest, roughly 5-10 minutes).
-  Write-Host "`n[3/3] Creating database and app (about 10 minutes)..."
+  # Step 3: everything else (Postgres and the Container Apps environment take the longest).
+  Write-Host "`n[3/3] Creating database and app (about 10-15 minutes)..."
   $env:TF_VAR_image_tag = $tag
   try {
     Invoke-Native terraform apply -input=false -auto-approve

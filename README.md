@@ -2,7 +2,7 @@
 
 Proof of concept for hosting a containerized Next.js survey app (admin + respondent flow) with real security controls. Respondents use one generic link, get a unique link, and use it to save and resume their work.
 
-> **Status:** working POC (respondent flow, admin, Azure deploy/teardown). The IT handoff doc and a hardening pass are still to come; see [docs/plan.md](docs/plan.md).
+> **Status:** working POC. The respondent flow, admin page, Azure deploy and teardown, and the IT handoff doc are done, and a full deploy and teardown has been tested live. It is not production ready: see "Known gaps" in [docs/it-requirements.md](docs/it-requirements.md).
 
 ## Quick start
 
@@ -28,13 +28,21 @@ One-time: install [Docker](https://www.docker.com/), [Terraform](https://develop
 ./scripts/down.ps1      # destroys everything (about 25 min; asks you to type the resource group name)
 ```
 
-- `up.ps1` prints the **respondent link** (give this one to everyone) and the **admin URL**. Options: `-Location westus3` if Postgres is restricted in the default region (`eastus2`), `-AllowedIp 203.0.113.7/32` to limit who can reach it, `-ResetAdminPassword`.
+- On the first run `up.ps1` asks for an admin password and saves only its hash in `infra/.admin-hash` (gitignored), so later runs do not ask again. Use `-ResetAdminPassword` to change it. The password itself is never stored.
+- `up.ps1` prints the **respondent link** (give this one to everyone) and the **admin URL**. Options: `-Location westus3` if Postgres is restricted in the default region (`eastus2`), `-AllowedIp 203.0.113.7/32` to limit who can reach it (re-run without it to open the site up).
 - **Before tearing down, open the admin page and Export CSV.** `down.ps1` deletes the database and the encryption key. Teardown is not reversible.
 - Teardown is slow because Azure takes a long time to delete the Container Apps environment. Leave it running until it prints "Torn down". If your terminal closes midway, just run `down.ps1` again.
 - It bills while it exists (Postgres and the app run continuously). `status.ps1` and `down.ps1` both confirm whether the resource group is gone.
 - Demo script: open the respondent link, enter an org name, fill in a few fields, Save, close the tab, reopen the unique link (or use "Resume" on the home page), Submit. Then sign in at `/admin`, see the response, Export CSV, try "New link" on an in-progress response and show the old link stops working.
 
-Infrastructure is Terraform in [`infra/`](infra/). State is a local file (gitignored); keep it until you run `down.ps1`.
+Infrastructure is Terraform in [`infra/`](infra/). State is a local file (gitignored); keep it until you run `down.ps1`. The deployed hostname is the free `*.azurecontainerapps.io` one, and responses expire 90 days after creation.
+
+## What is in the repo
+
+- `src/`: the Next.js app (respondent pages `/` and `/r`, admin `/admin`, API under `/api`)
+- `infra/`: Terraform for Azure (Container Apps, private Postgres, registry, logs)
+- `scripts/`: `up.ps1`, `down.ps1`, `status.ps1`, and the admin password hasher
+- `docker-compose.yml`: local development only
 
 ## Docs
 

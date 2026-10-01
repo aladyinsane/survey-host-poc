@@ -136,14 +136,14 @@ Before using it for a real survey, close the gaps that matter most: admin access
 The POC was deployed to Azure (East US 2) on 2026-10-01 with `up.ps1`, tested, then destroyed with `down.ps1`.
 
 - HTTPS works on the Azure hostname. HTTP returns a 301 redirect to HTTPS.
-- The security headers in section 4 are present on responses from the live app.
+- The security headers listed in section 4, including HSTS, were present on responses from the live app.
 - The full respondent flow worked end to end: start, save, resume, submit, and a rejected edit after submit. Admin sign-in, list, CSV export, and audit events worked. Unauthenticated admin calls returned 401, and a bad respondent token returned 404.
 - The database reports public network access disabled, sits on a delegated private subnet, and its hostname does not resolve from the public internet.
 - The container app ran as exactly one replica, took all four secrets from platform secrets (none appear in its environment settings), and the registry admin user was off.
 - The container logs held no answers, organization names, or passwords.
 - After `down.ps1`, the subscription's resource groups and resource count matched what they were before the deploy, with no leftover managed resource groups or soft-deleted workspaces.
 
-Not verified: the database contents on the live server (checked only locally), certificate details beyond the platform default, behavior under load, and a restore from backup.
+Not verified live: the database contents (checked only locally), certificate details beyond the platform default, how the Container Apps ingress sets X-Forwarded-For (the rate limiter depends on it, see gap 2), behavior under load, and a restore from backup.
 
 ## 11. Reference
 
