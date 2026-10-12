@@ -65,4 +65,74 @@ export const migrations: { id: string; sql: string }[] = [
         FOR EACH ROW EXECUTE FUNCTION audit_log_guard();
     `,
   },
+  {
+    id: "003_email_signin",
+    sql: `
+      -- Responses are owned by an email address instead of a link (ADR-0003).
+      ALTER TABLE responses
+        ADD COLUMN owner_email_hash bytea
+          CHECK (owner_email_hash IS NULL OR octet_length(owner_email_hash) = 32),
+        ADD COLUMN owner_email_enc bytea,
+        ADD COLUMN npi text CHECK (npi IS NULL OR npi ~ '^[0-9]{10}$'),
+        ADD COLUMN version integer NOT NULL DEFAULT 0;
+      -- Kept only for rows created before this migration.
+      ALTER TABLE responses ALTER COLUMN token_hash DROP NOT NULL;
+      -- Replaced by the survey-wide close date (SURVEY_CLOSES_AT).
+      ALTER TABLE responses ALTER COLUMN expires_at DROP NOT NULL, ALTER COLUMN expires_at DROP DEFAULT;
+
+      CREATE UNIQUE INDEX responses_one_per_owner ON responses (survey_id, owner_email_hash)
+        WHERE status <> 'revoked' AND owner_email_hash IS NOT NULL;
+      CREATE INDEX responses_npi ON responses (survey_id, npi) WHERE status <> 'revoked';
+
+      -- One live code per address; a new request replaces the row, which kills the old code.
+      CREATE TABLE signin_codes (
+        email_hash bytea PRIMARY KEY,
+        code_hash  bytea NOT NULL,
+        attempts   integer NOT NULL DEFAULT 0,
+        expires_at timestamptz NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now()
+      );
+
+      -- Only the SHA-256 of the session id is stored.
+      CREATE TABLE respondent_sessions (
+        id_hash      bytea PRIMARY KEY,
+        email_hash   bytea NOT NULL,
+        email_enc    bytea NOT NULL,
+        idle_seconds integer NOT NULL,
+        created_at   timestamptz NOT NULL DEFAULT now(),
+        last_seen_at timestamptz NOT NULL DEFAULT now(),
+        expires_at   timestamptz NOT NULL,
+        ended_at     timestamptz
+      );
+      CREATE INDEX respondent_sessions_email ON respondent_sessions (email_hash);
+
+      CREATE TABLE rate_limits (
+        key          text PRIMARY KEY,
+        window_start timestamptz NOT NULL,
+        count        integer NOT NULL
+      );
+
+      -- Same guard as 002, now also freezing the owner and NPI of submitted responses.
+      CREATE OR REPLACE FUNCTION responses_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF TG_OP = 'DELETE' THEN
+          RAISE EXCEPTION 'responses cannot be deleted';
+        END IF;
+        IF OLD.status = 'submitted' AND (
+             NEW.status <> 'submitted'
+             OR NEW.answers_enc IS DISTINCT FROM OLD.answers_enc
+             OR NEW.token_hash IS DISTINCT FROM OLD.token_hash
+             OR NEW.org_name IS DISTINCT FROM OLD.org_name
+             OR NEW.owner_email_hash IS DISTINCT FROM OLD.owner_email_hash
+             OR NEW.owner_email_enc IS DISTINCT FROM OLD.owner_email_enc
+             OR NEW.npi IS DISTINCT FROM OLD.npi) THEN
+          RAISE EXCEPTION 'submitted responses are immutable';
+        END IF;
+        IF OLD.status = 'revoked' AND NEW.status <> 'revoked' THEN
+          RAISE EXCEPTION 'revoked responses cannot be restored';
+        END IF;
+        RETURN NEW;
+      END $$;
+    `,
+  },
 ];

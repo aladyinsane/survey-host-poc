@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
-// A respondent's unique link is the credential: 256 random bits, shown once, stored only as a hash.
+// Respondent session ids: 256 random bits, stored only as a hash.
 export function generateToken(): string {
   return randomBytes(32).toString("base64url");
 }
