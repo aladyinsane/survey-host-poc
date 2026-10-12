@@ -110,7 +110,7 @@ The migration also replaces `responses_guard()` so that, once submitted, `owner_
 4. Generate the code: `crypto.randomInt(0, 1_000_000)`, padded to 6 digits.
 5. Upsert `signin_codes (email_hash, code_hash, attempts = 0, expires_at = now() + 10 minutes)`.
 6. Send the code email (below). If sending fails: delete the code row, log the failure (no address or code), and return `503` "We couldn't send the email. Try again in a few minutes."
-7. Audit `signin.code_requested`, with the response ID if this email owns a live response.
+7. Audit `signin.code_requested`, with the response ID if this email owns a live response. Refusals in steps 3 and 6 audit `signin.code_refused` with the reason (no address).
 8. `202 { ok: true }`.
 
 Any address may request a code, since anyone on the list can start a response. So "code sent" reveals nothing about who has responded.
@@ -288,7 +288,7 @@ End to end (run by hand on the local stack, and checked in the browser):
 
 ## Porting to the work app
 
-Copy as is: `src/lib/keys.ts`, `email.ts`, `npi.ts`, `dbRateLimit.ts`, `signin.ts`, `sessions.ts`, `mail.ts`, `respondentAuth.ts`, the `/api/auth/*` routes, `src/app/SignIn.tsx`, and migration `003_email_signin` (adjusted to your table names).
+Copy as is: `src/lib/keys.ts`, `email.ts`, `npi.ts`, `cookies.ts`, `tokens.ts`, `dbRateLimit.ts`, `signin.ts`, `sessions.ts`, `mail.ts` (change the survey title import), `respondentAuth.ts`, the `/api/auth/*` routes, `src/app/SignIn.tsx`, the `env.ts` mail and close-date settings, and migration `003_email_signin` (adjusted to your table names). `responses.ts` and `writeFailure.ts` show the owner lookup, version check, and close date in a survey's own data layer. The tests (`*.test.ts`, `*.db.test.ts`, `src/test/`) port with them.
 
 Then, in your survey:
 

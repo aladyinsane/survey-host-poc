@@ -1,6 +1,6 @@
 # survey-host-poc
 
-Proof of concept for hosting a containerized Next.js survey app (admin + respondent flow) with real security controls. Respondents use one generic link, get a unique link, and use it to save and resume their work.
+Proof of concept for hosting a containerized Next.js survey app (admin + respondent flow) with real security controls. Respondents use one generic link and sign in with their work email and a one-time code, so they can save and come back from any device ([ADR-0003](docs/adr/0003-email-code-sign-in.md)).
 
 > **Status:** working POC. The respondent flow, admin page, Azure deploy and teardown, and the IT handoff doc are done, and a full deploy and teardown has been tested live. It is not production ready: see "Known gaps" in [docs/it-requirements.md](docs/it-requirements.md).
 
@@ -14,9 +14,9 @@ node scripts/hash-admin-password.mjs   # prompts for an admin password, prints A
 docker compose up --build
 ```
 
-Open http://localhost:3000 for respondents and http://localhost:3000/admin for the admin page (set `APP_PORT` in `.env` if 3000 is taken). Stop and wipe local data with `docker compose down -v`.
+Open http://localhost:3000 for respondents and http://localhost:3000/admin for the admin page (set `APP_PORT` in `.env` if 3000 is taken). Sign-in codes land in the local Mailpit inbox at http://localhost:8025; nothing is really sent. Stop and wipe local data with `docker compose down -v`.
 
-Checks (also run in CI): `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run build`.
+Checks (also run in CI): `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run build`. Database tests (`*.db.test.ts`) also run when `TEST_DATABASE_URL` points at an empty Postgres database they can wipe, for example `TEST_DATABASE_URL=postgres://survey:survey@localhost:5432/survey_test npm test`.
 
 **Deploy to Azure (public URL)**
 
@@ -33,9 +33,11 @@ One-time: install [Docker](https://www.docker.com/), [Terraform](https://develop
 - **Before tearing down, open the admin page and Export CSV.** `down.ps1` deletes the database and the encryption key. Teardown is not reversible.
 - Teardown is slow because Azure takes a long time to delete the Container Apps environment. Leave it running until it prints "Torn down". If your terminal closes midway, just run `down.ps1` again.
 - It bills while it exists (Postgres and the app run continuously). `status.ps1` and `down.ps1` both confirm whether the resource group is gone.
-- Demo script: open the respondent link, enter an org name, fill in a few fields, Save, close the tab, reopen the unique link (or use "Resume" on the home page), Submit. Then sign in at `/admin`, see the response, Export CSV, try "New link" on an in-progress response and show the old link stops working.
+- **Email.** By default the deployed app uses `mail_transport = "log"`: sign-in codes are written to the container log (Azure portal, the container app, Log stream) instead of being emailed. That is for demos only, since anyone who can read the logs can sign in as anyone. To send real email through Microsoft 365, set these before `up.ps1`: `$env:TF_VAR_mail_transport="graph"`, `$env:TF_VAR_mail_from`, `$env:TF_VAR_graph_tenant_id`, `$env:TF_VAR_graph_client_id`, `$env:TF_VAR_graph_client_secret` (what IT provides, see [docs/it-requirements.md](docs/it-requirements.md) need 12).
+- **Close date.** Optional: `$env:TF_VAR_survey_closes_at="2027-01-15T23:59:00-05:00"`. After it, nobody can start, save, or submit, but respondents can still sign in to view and print.
+- Demo script: open the respondent link, enter an email, get the code (Mailpit locally, the log stream in Azure), sign in, enter an org name and NPI (`1234567893` is a valid test NPI), fill in a few fields, Save and exit. Sign in again in a private window and see the answers, then Submit and see the read-only view. Then sign in at `/admin`: the response shows its owner email, start a second response with the same NPI from another address and see "Duplicate NPI", use "Change owner", and Export CSV.
 
-Infrastructure is Terraform in [`infra/`](infra/). State is a local file (gitignored); keep it until you run `down.ps1`. The deployed hostname is the free `*.azurecontainerapps.io` one, and responses expire 90 days after creation.
+Infrastructure is Terraform in [`infra/`](infra/). State is a local file (gitignored); keep it until you run `down.ps1`. The deployed hostname is the free `*.azurecontainerapps.io` one.
 
 ## What is in the repo
 
