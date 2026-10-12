@@ -33,3 +33,44 @@ variable "allowed_ip_ranges" {
   type        = list(string)
   default     = []
 }
+
+variable "mail_transport" {
+  description = "How sign-in codes are emailed: graph (Microsoft 365) or log (writes codes to the container log; demos only, never real respondents)."
+  type        = string
+  default     = "log"
+  validation {
+    condition     = contains(["graph", "log"], var.mail_transport)
+    error_message = "mail_transport must be graph or log."
+  }
+}
+
+variable "mail_from" {
+  description = "No-reply address codes are sent from (required for graph)."
+  type        = string
+  default     = ""
+}
+
+variable "graph_tenant_id" {
+  description = "Microsoft Entra tenant of the mail-sending app registration (graph only)."
+  type        = string
+  default     = ""
+}
+
+variable "graph_client_id" {
+  description = "Client ID of the app registration allowed to send as mail_from (graph only)."
+  type        = string
+  default     = ""
+}
+
+variable "graph_client_secret" {
+  description = "Client secret of that app registration (graph only)."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "survey_closes_at" {
+  description = "Optional ISO 8601 date-time after which nobody can start, save, or submit, e.g. 2027-01-15T23:59:00-05:00."
+  type        = string
+  default     = ""
+}

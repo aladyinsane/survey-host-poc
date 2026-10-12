@@ -23,6 +23,16 @@ locals {
   # sslmode=require + uselibpqcompat: encrypted, certificate not verified. Traffic never leaves the
   # private VNet. Hardening item: ship the Azure CA bundle and verify the server certificate.
   database_url = "postgres://surveyadmin:${random_password.db.result}@${azurerm_postgresql_flexible_server.pg.fqdn}:5432/survey?sslmode=require&uselibpqcompat=true"
+  # Non-secret app settings. Empty values are left out. PUBLIC_URL is built from the app and
+  # environment names so emails never take the address from a request header.
+  app_settings = { for k, v in {
+    MAIL_TRANSPORT   = var.mail_transport
+    MAIL_FROM        = var.mail_from
+    GRAPH_TENANT_ID  = var.graph_tenant_id
+    GRAPH_CLIENT_ID  = var.graph_client_id
+    SURVEY_CLOSES_AT = var.survey_closes_at
+    PUBLIC_URL       = "https://ca-${var.name}.${azurerm_container_app_environment.env.default_domain}"
+  } : k => v if v != "" }
 }
 
 resource "random_string" "suffix" {
@@ -221,6 +231,13 @@ resource "azurerm_container_app" "app" {
     name  = "admin-session-secret"
     value = random_id.session_secret.b64_std
   }
+  dynamic "secret" {
+    for_each = var.graph_client_secret == "" ? [] : [1]
+    content {
+      name  = "graph-client-secret"
+      value = var.graph_client_secret
+    }
+  }
 
   ingress {
     external_enabled           = true
@@ -269,6 +286,20 @@ resource "azurerm_container_app" "app" {
       env {
         name        = "ADMIN_SESSION_SECRET"
         secret_name = "admin-session-secret"
+      }
+      dynamic "env" {
+        for_each = local.app_settings
+        content {
+          name  = env.key
+          value = env.value
+        }
+      }
+      dynamic "env" {
+        for_each = var.graph_client_secret == "" ? [] : [1]
+        content {
+          name        = "GRAPH_CLIENT_SECRET"
+          secret_name = "graph-client-secret"
+        }
       }
 
       liveness_probe {
