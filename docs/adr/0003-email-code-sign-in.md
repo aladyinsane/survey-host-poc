@@ -1,6 +1,6 @@
 # ADR-0003: Respondents sign in with a one-time code sent to their email
 
-Status: Proposed (2026-10-12, revised twice the same day with the author's answers). Would supersede [ADR-0002](0002-token-link-credential.md) once accepted.
+Status: Accepted (2026-10-12). Supersedes [ADR-0002](0002-token-link-credential.md). Detailed design: [spec](../specs/0003-email-code-sign-in.md).
 
 ## Scope
 
@@ -32,7 +32,7 @@ Respondents prove who they are with their work email plus a 6-digit code we emai
 ### Flow
 
 1. **Enter email.** Open the generic URL, enter work email.
-2. **Code sent.** The page always says "If that address can receive a code, we've sent one. It can take a minute. Check junk mail if it doesn't arrive." (The same message whether or not the address has a response, so nobody can probe who has responded.)
+2. **Code sent.** The page says "We sent a code to [address]. It can take a minute. Check junk mail if it doesn't arrive." Any address can sign in, so this reveals nothing. Whether an address already has a response is only shown after the code is entered, which proves the person can read that inbox.
 3. **Enter code.** Optional checkbox: "Keep me signed in on this device for 14 days" (off by default, with a note not to use it on a shared computer).
 4. **First time:** enter organization name and NPI, then start. The response belongs to this email from now on.
    **Returning:** go straight to the response.
@@ -47,8 +47,8 @@ Respondents prove who they are with their work email plus a 6-digit code we emai
 - 6 random digits from a secure random generator, valid 10 minutes, single use.
 - Stored only as a keyed hash (HMAC-SHA256 with a server secret) tied to the email's lookup hash, never in plain text.
 - 5 wrong guesses kill the code. Requesting a new code kills any older one.
-- Rate limits: per email (5 codes per hour), per IP (20 code requests per hour), and an overall cap that stays under the sender's quota. Kept in the database, not in memory, so they survive restarts and work with more than one app instance.
-- When a limit is hit, the "code sent" page looks the same and no email goes out, so limits can't be used to probe either.
+- Rate limits: per email (5 codes per hour, 10 per day), per IP (20 code requests per hour), and an overall cap that stays under the sender's quota. Kept in the database, not in memory, so they survive restarts and work with more than one app instance.
+- With those limits, someone who knows a respondent's address and keeps guessing gets at most 50 guesses a day out of a million possible codes, and every attempt sends the real respondent an email they didn't ask for.
 
 ### Sessions
 
@@ -81,7 +81,7 @@ Admins see the decrypted owner email. The CSV export includes it so follow-up is
 
 | Method and path | Body | Result |
 |----|----|----|
-| `POST /api/auth/code` | `{ email }` | Always `202`. Sends a code if within limits. |
+| `POST /api/auth/code` | `{ email }` | `202` when sent. `429` if this address or IP asked too often |
 | `POST /api/auth/verify` | `{ email, code, remember }` | `200` with session cookie and `{ hasResponse, status }`, or `401` (same message for wrong, expired, used, or killed codes) |
 | `POST /api/auth/signout` | none | `204`, ends the session, clears the cookie |
 | `POST /api/responses` | `{ orgName, npi }` | `201` creates the signed-in email's response. `409` if this email already has one |
@@ -90,15 +90,15 @@ Admins see the decrypted owner email. The CSV export includes it so follow-up is
 
 ### Sending the email
 
-The app sends through whatever IT provides for the no-reply address. The code keeps sending behind one small "send email" function, so the backend is a setting, not a rewrite. In order of preference:
+The employer uses Microsoft 365, so the app sends with **Microsoft Graph `sendMail` from a no-reply mailbox** on the work domain. Sending sits behind one small "send email" function with a setting that picks the backend:
 
-1. **Microsoft Graph `sendMail` from a no-reply mailbox**, if the employer uses Microsoft 365. IT creates the mailbox and an app registration that is allowed to send *only* as that mailbox (an application access policy). The app holds a client secret or, better, uses its managed identity.
-2. **SMTP relay** (IT's relay, or Azure Communication Services with the work domain verified). The most universal option.
-3. **Locally:** Mailpit in docker-compose, so nothing real is sent.
+- `graph`: production. IT creates the mailbox and an app registration with the `Mail.Send` application permission, limited so it can send *only* as that mailbox (Exchange Online RBAC for Applications, or the older application access policy). The app uses a client secret IT provides. No extra packages: two HTTPS calls.
+- `mailpit`: local docker-compose. Mail lands in a local Mailpit inbox, nothing real is sent.
+- `log`: demo deployments with no mailbox. The code is written to the app's log so the flow can be shown. Never for real respondents, because anyone who can read the logs could sign in as anyone. The app prints a warning at startup when it's on.
 
-Volume: a few hundred respondents, staggered, each signing in a handful of times, is a few thousand emails over the survey. That's well within normal limits for a Microsoft 365 mailbox or Azure Communication Services on a verified domain. No quota request should be needed.
+Volume: a few hundred respondents, staggered, each signing in a handful of times, is a few thousand emails over the survey. That's well within Microsoft 365's per-mailbox limits (10,000 recipients a day, 30 messages a minute). No quota request should be needed.
 
-**What we need from IT:** a no-reply address on the work domain, a way for the app to send as it (one of the options above), and SPF/DKIM already covering it (normally true for the main domain). The invitation email should name that address so respondents know to expect it.
+**What we need from IT:** the no-reply mailbox, the app registration (tenant ID, client ID, client secret) limited to sending as that mailbox, and confirmation that SPF/DKIM cover the address (normally true for the main domain). The invitation email should name that address so respondents know to expect it.
 
 ### What goes away
 
@@ -134,21 +134,15 @@ Downsides we accept:
 - **Slightly more friction** when returning (one email round trip).
 - **The survey page needs a small hook** to reopen sign-in on a 401 instead of losing typed answers.
 
-## Implementation outline (once accepted)
+## Implementation
 
-1. `docs/adr-0003`: this ADR accepted, ADR-0002 marked superseded. A spec written from it, detailed enough to rebuild in the work codebase.
-2. `feat/email-sender`: "send email" function with Graph, SMTP, and console backends, plus Mailpit in docker-compose.
-3. `feat/code-sign-in`: tables, `/api/auth/*`, rate limits in the database, cleanup of expired rows. Tests for code expiry, single use, attempt limits, code reuse after a new one is requested, no enumeration (same response and similar timing), rate limits, session idle and total expiry, "keep me signed in," and sign-out.
-4. `feat/respondent-sessions`: survey API moves to the session cookie; owner email, NPI with check digit, version; close date replaces the 90-day expiry; re-sign-in box on 401; token-link UI and storage removed. New migration (existing ones are never edited).
-5. `feat/admin-owner-email`: owner email shown, NPI duplicate flags, "change owner email" replaces "reissue," new audit events, owner email in CSV.
-6. `docs/it-handoff-update`: IT doc updated (credential section, the no-reply sender request, personal data), README demo script, and a live run of the whole flow.
+The work survey is also Next.js and Postgres, so the sign-in code here is written to be copied across: the sign-in, session, mail, and NPI modules don't depend on this repo's demo survey.
 
-## Open questions
-
-1. **What is your work survey built with** (language, framework, database, where it's hosted)? If it's also Next.js and Postgres, code from here can be copied over. If not, the spec is what you'd carry across, and I'll write it with that in mind.
-2. **Does your employer use Microsoft 365 for email?** If so, the Graph option is what to ask IT for. If you don't know, ask IT for "a no-reply mailbox the app can send from" and let them pick.
+1. `docs/adr-0003-email-code-sign-in`: this ADR accepted, ADR-0002 marked superseded, and the [spec](../specs/0003-email-code-sign-in.md).
+2. `feat/email-code-sign-in`: the whole change in one branch, one commit per step (mail sender, sign-in and sessions, respondent flow, admin, docs). The respondent flow can't switch from links to sign-in halfway, so splitting it across PRs would leave the app broken in between.
 
 ## Related
 
-- [ADR-0002: Unique link as respondent credential](0002-token-link-credential.md) (superseded by this, once accepted)
+- [ADR-0002: Unique link as respondent credential](0002-token-link-credential.md) (superseded by this)
+- [Spec](../specs/0003-email-code-sign-in.md)
 - [IT requirements](../it-requirements.md)

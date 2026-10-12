@@ -49,4 +49,5 @@ Infrastructure is Terraform in [`infra/`](infra/). State is a local file (gitign
 - [What we need from IT](docs/it-requirements.md): architecture, security controls, gaps, and likely IT questions
 - [Plan](docs/plan.md)
 - [ADR-0001: Hosting on Azure Container Apps](docs/adr/0001-hosting-azure-container-apps.md)
-- [ADR-0002: Unique link as respondent credential](docs/adr/0002-token-link-credential.md)
+- [ADR-0002: Unique link as respondent credential](docs/adr/0002-token-link-credential.md) (superseded)
+- [ADR-0003: Email one-time code sign-in](docs/adr/0003-email-code-sign-in.md) and its [spec](docs/specs/0003-email-code-sign-in.md)

@@ -1,6 +1,6 @@
 # ADR-0002: A unique link is the respondent's credential
 
-Status: Accepted (2026-09-30)
+Status: Superseded by [ADR-0003](0003-email-code-sign-in.md) (2026-10-12). Accepted 2026-09-30.
 
 ## Context
 Respondents need to save and resume a survey without creating accounts or passwords. The server will not send email. Responses are sensitive, so a guessable or leaked identifier is a real risk.
