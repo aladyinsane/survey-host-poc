@@ -15,16 +15,32 @@ services:
       interval: 5s
       retries: 10
 
+  # Catches every email the app sends. Inbox at http://localhost:8025. Nothing leaves the machine.
+  mailpit:
+    image: axllent/mailpit:v1.31
+    ports:
+      - "127.0.0.1:8025:8025"
+
   app:
     build: .
     depends_on:
       db:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     environment:
       DATABASE_URL: postgres://survey:${POSTGRES_PASSWORD:-survey}@db:5432/survey
       DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?set DATA_ENCRYPTION_KEY in .env}
       ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:?set ADMIN_PASSWORD_HASH in .env}
       ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:?set ADMIN_SESSION_SECRET in .env}
+      MAIL_TRANSPORT: ${MAIL_TRANSPORT:-mailpit}
+      MAIL_FROM: ${MAIL_FROM:-no-reply@survey.local}
+      MAILPIT_URL: http://mailpit:8025
+      GRAPH_TENANT_ID: ${GRAPH_TENANT_ID:-}
+      GRAPH_CLIENT_ID: ${GRAPH_CLIENT_ID:-}
+      GRAPH_CLIENT_SECRET: ${GRAPH_CLIENT_SECRET:-}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
+      SURVEY_CLOSES_AT: ${SURVEY_CLOSES_AT:-}
     ports:
       - "127.0.0.1:${APP_PORT:-3000}:3000"
     read_only: true

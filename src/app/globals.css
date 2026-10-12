@@ -83,3 +83,54 @@ td {
   padding: 0.4rem 0.5rem;
   border-bottom: 1px solid #ddd;
 }
+
+.header {
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+label.check {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+label.check input {
+  width: auto;
+  margin-top: 0.3rem;
+}
+
+button.link {
+  border: none;
+  padding: 0;
+  text-decoration: underline;
+  background: none;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+input[readonly] {
+  background: #f4f4f4;
+  border: 1px solid #ccc;
+}
+
+.flag {
+  color: #8a1c1c;
+  font-weight: 600;
+}
+
+@media print {
+  .no-print,
+  .header {
+    display: none;
+  }
+
+  main {
+    margin: 0;
+    max-width: none;
+  }
+}

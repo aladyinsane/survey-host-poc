@@ -8,6 +8,19 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: survey
+          POSTGRES_PASSWORD: survey
+          POSTGRES_DB: survey_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U survey" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # Database tests (*.db.test.ts) run only when this is set.
+      TEST_DATABASE_URL: postgres://survey:survey@localhost:5432/survey_test
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7

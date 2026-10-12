@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { buildCookie, cookieValue, isSameOrigin } from "./cookies";
 import { env } from "./env";
 import { clientIp, rateLimit } from "./rateLimit";
 
@@ -47,19 +48,8 @@ export function verifySession(value: string | undefined, secret: string, now = D
   return Number(payload) > now;
 }
 
-function cookieValue(req: Request, name: string): string | undefined {
-  const header = req.headers.get("cookie") ?? "";
-  for (const part of header.split(";")) {
-    const [k, ...v] = part.trim().split("=");
-    if (k === name) return v.join("=");
-  }
-  return undefined;
-}
-
-// Cookie is HttpOnly + SameSite=Strict; Secure everywhere except local http development.
 export function sessionCookie(value: string, maxAgeSeconds: number): string {
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
-  return `${SESSION_COOKIE}=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAgeSeconds}${secure}`;
+  return buildCookie(SESSION_COOKIE, value, maxAgeSeconds);
 }
 
 // Returns a Response to send back if the request is not an authenticated admin request.
@@ -70,9 +60,6 @@ export function requireAdmin(req: Request): Response | null {
   if (!rateLimit(`admin-api:${clientIp(req)}`, 120, 60_000)) return deny(429);
   if (!verifySession(cookieValue(req, SESSION_COOKIE), env().ADMIN_SESSION_SECRET))
     return deny(401);
-  if (req.method !== "GET") {
-    const origin = req.headers.get("origin");
-    if (!origin || new URL(origin).host !== req.headers.get("host")) return deny(403);
-  }
+  if (req.method !== "GET" && !isSameOrigin(req)) return deny(403);
   return null;
 }
