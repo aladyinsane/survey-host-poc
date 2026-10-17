@@ -23,10 +23,15 @@
 
 **What the app needs from IT:** issuer URL, client ID, client secret. Set as `OKTA_ISSUER`, `OKTA_CLIENT_ID`, `OKTA_CLIENT_SECRET`, plus `OKTA_REDIRECT_URI` and `OKTA_POST_LOGOUT_REDIRECT_URI`.
 
-**Local development (no Docker):**
-- Run a mock OIDC provider as a Node process (for example the `oauth2-mock-server` dev dependency), started by an npm script or the existing PowerShell dev script next to the embedded Postgres.
-- The app talks to it through the same `OKTA_*` settings, so switching to real Okta is config only. No dev-only bypass of sign-in in app code.
-- Optional: a free Okta developer org to try real self-service sign-up and password reset before IT's org is ready.
+**Environments:** the app reaches all three through the same `OKTA_*` settings, so switching is config only. No dev-only bypass of sign-in in app code.
+
+| Environment | Okta | Used for |
+|---|---|---|
+| Automated tests | Mock OIDC provider as a Node process (for example the `oauth2-mock-server` dev dependency), started by an npm script or the existing PowerShell dev script next to the embedded Postgres. No Docker. | Unit and integration tests, offline work |
+| Local manual testing | Okta Integrator Free Plan org (already created) | End-to-end checks with real Okta screens: sign-up, email verification, password plus email code, password reset, sign-out |
+| Production | IT's Okta org | Real respondents |
+
+**Setting up the Integrator org:** mirror the "What IT sets up" list below in the Integrator org, so what works there will work in IT's org. Create the OIDC app with sign-in redirect `http://localhost:<port>/auth/callback` and sign-out redirect `http://localhost:<port>/`. Put its issuer URL, client ID, and client secret in the local env file, which is not committed. Limits: development only, never real respondents or real data; reportedly about 10 users, so delete test accounts as you go; Okta may deactivate it after about 180 days without use.
 
 **Done when:**
 - [ ] Unsigned visitors to `/` and the respondent API are sent to Okta (pages) or get `401` (API).
@@ -35,7 +40,9 @@
 - [ ] First sign-in leads to the org name and NPI step; returning sign-in opens the existing response; submitted responses open read-only.
 - [ ] "Save and exit" ends the app session and does an Okta sign-out (RP-initiated logout) back to `/`.
 - [ ] A save that gets `401` keeps the typed answers, sends the respondent through Okta, and finishes the save on return.
-- [ ] Works end to end locally against the mock OIDC provider with embedded Postgres, no Docker and no Okta details needed.
+- [ ] Automated tests pass against the mock OIDC provider with embedded Postgres, no Docker and no Okta details needed.
+- [ ] Full flow checked by hand against the Integrator org: sign up, verify email, start a response, save and exit, sign back in with password plus email code, reset a password, submit, view read-only.
+- [ ] Okta settings and secrets live only in the local env file and deployment secrets, never in the repo.
 - [ ] `/api/auth/code`, `/api/auth/verify`, the `signin_codes` table, and the app's code-sending path are removed (or switched off behind config until Okta goes live).
 - [ ] No tokens, codes, session IDs, or email addresses in logs or the audit table.
 
@@ -58,6 +65,6 @@
 - Will IT accept a no-expiry password policy for this group, given accounts last about 2 months and are then deleted?
 - Who at IT deletes the respondent accounts, and how soon after teardown? Respondents can view their submitted answers until teardown, so accounts should go at teardown, not at the close date.
 
-**Decided:** MFA is password plus email code. Passwords don't expire. Respondent accounts are deleted after the survey closes and the data is exported. The survey is open about 2 months.
+**Decided:** Local manual testing uses an Okta Integrator Free Plan org; production uses IT's org. MFA is password plus email code. Passwords don't expire. Respondent accounts are deleted after the survey closes and the data is exported. The survey is open about 2 months.
 
 **Related:** [ADR-0003](../adr/0003-email-code-sign-in.md) and its [spec](../specs/0003-email-code-sign-in.md) (would be superseded by a new ADR for Okta); [IT requirements](../it-requirements.md) need 12 (Graph mailbox, no longer needed once Okta sends the emails).
