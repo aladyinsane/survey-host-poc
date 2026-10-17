@@ -7,7 +7,7 @@
 **Flow:**
 1. Respondent opens the survey link. The app redirects to the Okta-hosted sign-in page.
 2. First visit: they click "Sign up", enter email, name, and a password, and verify the email with a code Okta sends. Okta puts them in a "Survey respondents" group.
-3. Return visits: email and password (plus a second factor if IT requires one). "Forgot password" is handled by Okta by email.
+3. Return visits: email and password, then a code Okta emails them (MFA is required). "Forgot password" is handled by Okta by email.
 4. Okta redirects back to `/auth/callback`. The app checks the ID token, requires `email_verified = true`, and creates its existing server-side session keyed by the email's lookup hash.
 5. From here the app behaves as it does today: first time asks for org name and NPI, returning goes straight to the response.
 6. "Save and exit" ends the app session and also signs out of Okta, so the next person on a shared computer isn't signed straight back in.
@@ -15,8 +15,9 @@
 **What IT sets up (Okta Identity Engine):**
 - An OIDC web app integration (authorization code with PKCE, client secret). Sign-in redirect URI `https://<host>/auth/callback`, sign-out redirect URI `https://<host>/`.
 - A profile enrollment (self-service registration) policy attached to this app only, with email verification required. Assign new users to a "Survey respondents" group.
-- Password policy for that group, with self-service password reset by email.
-- Assign the app to that group only. An authentication policy for the app (password, plus whatever second factor IT requires).
+- Password policy for that group: passwords never expire, normal lockout after failed attempts, self-service password reset by email.
+- Assign the app to that group only. An authentication policy for the app: password plus email code, every sign-in.
+- After the survey is torn down: deactivate and delete every account in the group, then the group. Accounts are not kept for a later survey.
 - Keep respondents off other apps and the Okta dashboard.
 - Optional: custom email domain so Okta's emails come from our domain. Optional: registration inline hook if IT wants to gate sign-up (for example an access code from the invitation email).
 
@@ -47,15 +48,16 @@
 - Same-origin checks on state-changing requests stay.
 - Local dev: Windows, PowerShell, embedded Postgres, no Docker.
 
-**Out of scope:** pre-loading users from the distribution list; a separate Okta tenant or Auth0; social or partner-org sign-in; admin SSO; admin "change owner email" (remove it if it exists); passwordless sign-up; Okta account cleanup at teardown (IT task, but listed in Open questions).
+**Out of scope:** pre-loading users from the distribution list; a separate Okta tenant or Auth0; social or partner-org sign-in; admin SSO; admin "change owner email" (remove it if it exists); passwordless sign-up; deleting Okta accounts from the app (IT does it in Okta).
 
 **Open questions:**
 - Which Okta product does IT run (Workforce on Identity Engine or Classic)? Self-service registration as described needs Identity Engine.
-- Does IT require a second factor for respondents, and which one? Email code is the least friction for outside users; Okta Verify asks them to install an app.
-- What password rules apply to the respondent group? Long or frequently expiring passwords will cause lockouts over a 2 to 3 month survey.
 - How are a few hundred outside users licensed in our Okta org, and does IT accept them there?
 - Does "Keep me signed in for 14 days" stay (app session) or move to Okta's session settings?
 - Can Okta's emails come from our domain? If not, the invitation must name Okta's sender so verification and reset emails aren't missed.
-- Who deactivates and deletes respondent accounts at teardown, and when?
+- Will IT accept a no-expiry password policy for this group, given accounts last about 2 months and are then deleted?
+- Who at IT deletes the respondent accounts, and how soon after teardown? Respondents can view their submitted answers until teardown, so accounts should go at teardown, not at the close date.
+
+**Decided:** MFA is password plus email code. Passwords don't expire. Respondent accounts are deleted after the survey closes and the data is exported. The survey is open about 2 months.
 
 **Related:** [ADR-0003](../adr/0003-email-code-sign-in.md) and its [spec](../specs/0003-email-code-sign-in.md) (would be superseded by a new ADR for Okta); [IT requirements](../it-requirements.md) need 12 (Graph mailbox, no longer needed once Okta sends the emails).
